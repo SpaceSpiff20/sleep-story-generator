@@ -398,43 +398,28 @@ export async function generateAudioFromStory(
   try {
     await progressCallback("audio_generation", "running");
 
-    const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-    const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID;
+    const SPEECHIFY_API_KEY = process.env.SPEECHIFY_API_KEY;
 
-    if (!ELEVENLABS_API_KEY || !ELEVENLABS_VOICE_ID) {
-      throw new Error("ElevenLabs API key or Voice ID not configured");
+    if (!SPEECHIFY_API_KEY) {
+      throw new Error("Speechify API key not configured");
     }
 
-    console.log("Generating audio with ElevenLabs...");
+    console.log("Generating audio with Speechify...");
 
-    const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
-      {
-        method: "POST",
-        headers: {
-          "xi-api-key": ELEVENLABS_API_KEY,
-          "Content-Type": "application/json",
-          Accept: "audio/mpeg",
-        },
-        body: JSON.stringify({
-          text: story.text,
-          model_id: "eleven_multilingual_v2",
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.8,
-          },
-        }),
-      }
-    );
+    const { SpeechifyTTSProvider } = await import('./speechify-tts');
+    const ttsProvider = new SpeechifyTTSProvider(SPEECHIFY_API_KEY);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `ElevenLabs API error: ${response.status} - ${errorText}`
-      );
-    }
+    const ttsResponse = await ttsProvider.synthesizeSpeech({
+      text: story.text,
+      format: 'mp3',
+      voice: process.env.SPEECHIFY_VOICE_ID || 'scott',
+      language: 'en', // Default to English for sleep stories
+      // Legacy ElevenLabs parameters (ignored by Speechify)
+      stability: 0.5,
+      similarity_boost: 0.8,
+    });
 
-    let audioBuffer = Buffer.from(await response.arrayBuffer());
+    let audioBuffer = Buffer.from(ttsResponse.audioData, 'base64');
 
     // Embed metadata if provided
     if (metadata) {
