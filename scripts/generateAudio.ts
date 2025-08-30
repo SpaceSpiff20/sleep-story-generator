@@ -1,9 +1,9 @@
 /**
  * generateAudio.ts
  *
- * Script to generate TTS audio for a Key To Sleep episode story using ElevenLabs API.
- * Reads story text from an input file, sends to ElevenLabs, saves resulting audio as .mp3.
- * Requires ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID in .env.local.
+ * Script to generate TTS audio for a Key To Sleep episode story using Speechify API.
+ * Reads story text from an input file, sends to Speechify, saves resulting audio as .mp3.
+ * Requires SPEECHIFY_API_KEY in .env.local.
  */
 
 (async () => {
@@ -13,8 +13,7 @@
 
   dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
 
-  const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-  const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID;
+  const SPEECHIFY_API_KEY = process.env.SPEECHIFY_API_KEY;
   const OUTPUT_DIR = path.resolve(__dirname, '../output');
 
 // Find the most recent story file in the output directory
@@ -31,8 +30,8 @@ async function getLatestStoryFile(): Promise<{ path: string, episodeId: string }
   return { path: path.join(OUTPUT_DIR, latest), episodeId };
 }
 
-if (!ELEVENLABS_API_KEY || !ELEVENLABS_VOICE_ID) {
-  console.error('Missing ELEVENLABS_API_KEY or ELEVENLABS_VOICE_ID in environment.');
+if (!SPEECHIFY_API_KEY) {
+  console.error('Missing SPEECHIFY_API_KEY in environment.');
   process.exit(1);
 }
 
@@ -42,31 +41,19 @@ async function generateAudio() {
     const storyText = await fs.readFile(storyFilePath, 'utf8');
     const outputAudioFile = path.join(OUTPUT_DIR, `${episodeId}-audio.mp3`);
 
-    const headers: Record<string, string> = {
-      'xi-api-key': process.env.ELEVENLABS_API_KEY || '',
-      'Content-Type': 'application/json',
-      'Accept': 'audio/mpeg',
-    };
+    const { SpeechifyTTSProvider } = await import('../lib/speechify-tts');
+    const ttsProvider = new SpeechifyTTSProvider(SPEECHIFY_API_KEY!);
 
-    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify({
-        text: storyText,
-        model_id: 'eleven_multilingual_v2',
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.8
-        }
-      })
+    const ttsResponse = await ttsProvider.synthesizeSpeech({
+      text: storyText,
+      format: 'mp3',
+      voice: process.env.SPEECHIFY_VOICE_ID || 'scott',
+      language: 'en',
+      stability: 0.5,
+      similarity_boost: 0.8
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`ElevenLabs API error: ${response.status} - ${errText}`);
-    }
-
-    const audioBuffer = Buffer.from(await response.arrayBuffer());
+    const audioBuffer = Buffer.from(ttsResponse.audioData, 'base64');
     await fs.writeFile(outputAudioFile, audioBuffer);
     console.log(`Audio saved to ${outputAudioFile}`);
   } catch (err) {
